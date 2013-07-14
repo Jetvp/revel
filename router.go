@@ -113,11 +113,19 @@ func (router *Router) Route(req *http.Request) *RouteMatch {
 
 	// If the action is variablized, replace into it with the captured args.
 	controllerName, methodName := route.ControllerName, route.MethodName
-	if controllerName[0] == ':' {
-		controllerName = params[controllerName[1:]][0]
+	if pos := strings.LastIndex(controllerName, ":"); pos != -1 {
+		if pos == 0 {
+			controllerName = params[controllerName[pos+1:]][0]
+		} else {
+			controllerName = controllerName[:pos] + params[controllerName[pos+1:]][0]
+		}
 	}
-	if methodName[0] == ':' {
-		methodName = params[methodName[1:]][0]
+	if pos := strings.LastIndex(methodName, ":"); pos != -1 {
+		if pos == 0 {
+			methodName = params[methodName[pos+1:]][0]
+		} else {
+			methodName = methodName[:pos] + params[methodName[pos+1:]][0]
+		}
 	}
 
 	return &RouteMatch{
@@ -225,7 +233,7 @@ func validateRoute(route *Route) error {
 	}
 
 	// Skip variable routes.
-	if parts[0][0] == ':' || parts[1][0] == ':' {
+	if strings.LastIndex(parts[0], ":") != -1 || strings.LastIndex(parts[1], ":") != -1 {
 		return nil
 	}
 
@@ -326,17 +334,27 @@ func (router *Router) Reverse(action string, argValues map[string]string) *Actio
 		}
 
 		// Check that the action matches or is a wildcard.
-		controllerWildcard := route.ControllerName[0] == ':'
-		methodWildcard := route.MethodName[0] == ':'
-		if (!controllerWildcard && route.ControllerName != controllerName) ||
-			(!methodWildcard && route.MethodName != methodName) {
+		controllerWildcard := strings.LastIndex(route.ControllerName, ":")
+		methodWildcard := strings.LastIndex(route.MethodName, ":")
+		if (controllerWildcard == -1 && route.ControllerName != controllerName) ||
+			(methodWildcard == -1 && route.MethodName != methodName) {
 			continue
 		}
-		if controllerWildcard {
-			argValues[route.ControllerName[1:]] = controllerName
+		// Check prefix excists and matchs
+		if (controllerWildcard > 0 && len(route.ControllerName) <= controllerWildcard) ||
+			(methodWildcard > 0 && len(route.MethodName) <= methodWildcard) {
+			continue
 		}
-		if methodWildcard {
-			argValues[route.MethodName[1:]] = methodName
+		if (controllerWildcard > 0 && route.ControllerName[:controllerWildcard] != controllerName[:controllerWildcard]) ||
+			(methodWildcard > 0 && route.MethodName[:methodWildcard] != methodName[:methodWildcard]) {
+			continue
+		}
+		// Insert origional methods/function
+		if controllerWildcard != -1 {
+			argValues[route.ControllerName[controllerWildcard+1:]] = controllerName[controllerWildcard:]
+		}
+		if methodWildcard != -1 {
+			argValues[route.MethodName[methodWildcard+1:]] = methodName[methodWildcard:]
 		}
 
 		// Build up the URL.
@@ -345,17 +363,24 @@ func (router *Router) Reverse(action string, argValues map[string]string) *Actio
 			pathElements = strings.Split(route.Path, "/")
 		)
 		for i, el := range pathElements {
-			if el == "" || el[0] != ':' {
+			pos := strings.LastIndex(el, ":")
+			if pos == -1 {
 				continue
 			}
 
-			val, ok := argValues[el[1:]]
+			val, ok := argValues[el[pos+1:]]
 			if !ok {
 				val = "<nil>"
 				ERROR.Print("revel/router: reverse route missing route arg ", el[1:])
 			}
-			pathElements[i] = val
-			delete(argValues, el[1:])
+			// Include any prefixes
+			if pos == 0 {
+				pathElements[i] = val
+			} else {
+				pathElements[i] = el[:pos] + val
+			}
+			delete(argValues, el[pos+1:])
+
 			continue
 		}
 
