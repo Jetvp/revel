@@ -51,6 +51,12 @@ func (c *Controller) FlashParams() {
 	}
 }
 
+func (c *Controller) PushParams() {
+	for key, vals := range c.Params.Values {
+		c.Flash.Data[key] = vals[0]
+	}
+}
+
 func (c *Controller) SetCookie(cookie *http.Cookie) {
 	http.SetCookie(c.Response.Out, cookie)
 }
