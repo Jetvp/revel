@@ -14,13 +14,14 @@ import (
 )
 
 type Route struct {
-	Method         string   // e.g. GET
-	Path           string   // e.g. /app/:id
-	Action         string   // e.g. "Application.ShowApp", "404"
-	ControllerName string   // e.g. "Application", ""
-	MethodName     string   // e.g. "ShowApp", ""
-	FixedParams    []string // e.g. "arg1","arg2","arg3" (CSV formatting)
-	TreePath       string   // e.g. "/GET/app/:id"
+	Method         string         // e.g. GET
+	Path           string         // e.g. /app/:id
+	Action         string         // e.g. "Application.ShowApp", "404"
+	ControllerName string         // e.g. "Application", ""
+	MethodName     string         // e.g. "ShowApp", ""
+	FixedParams    []string       // e.g. "arg1","arg2","arg3" (CSV formatting)
+	TreePath       string         // e.g. "/GET/app/:id"
+	leaf           *pathtree.Leaf // leaf in the tree used for reverse routing
 
 	routesPath string // e.g. /Users/robfig/gocode/src/myapp/conf/routes
 	line       int    // e.g. 3
@@ -68,8 +69,16 @@ func NewRoute(method, path, action, fixedArgs, routesPath string, line int) (r *
 
 	actionSplit := strings.Split(action, ".")
 	if len(actionSplit) == 2 {
-		r.ControllerName = actionSplit[0]
-		r.MethodName = actionSplit[1]
+		if (len(actionSplit[0]) > 1) && (actionSplit[0][len(actionSplit[0])-1] == ':') {
+			r.ControllerName = actionSplit[0][:len(actionSplit[0])-2]
+		} else {
+			r.ControllerName = actionSplit[0]
+		}
+		if (len(actionSplit[1]) > 1) && (actionSplit[1][len(actionSplit[1])-1] == ':') {
+			r.MethodName = actionSplit[1][:len(actionSplit[1])-2]
+		} else {
+			r.MethodName = actionSplit[1]
+		}
 	}
 
 	return
@@ -80,6 +89,18 @@ func treePath(method, path string) string {
 		method = ":METHOD"
 	}
 	return "/" + method + path
+}
+
+func untreePath(path string) (method string, url string) {
+	if len(path) == 0 {
+		return path, "/"
+	}
+	split := strings.Index(path[1:], "/")
+
+	if split == -1 {
+		return path, "/"
+	}
+	return path[:split], path[split+1:]
 }
 
 type Router struct {
@@ -150,11 +171,12 @@ func (router *Router) Refresh() (err *Error) {
 func (router *Router) updateTree() *Error {
 	router.Tree = pathtree.New()
 	for _, route := range router.Routes {
-		err := router.Tree.Add(route.TreePath, route)
+		var err error
+		route.leaf, err = router.Tree.Add(route.TreePath, route)
 
 		// Allow GETs to respond to HEAD requests.
 		if err == nil && route.Method == "GET" {
-			err = router.Tree.Add(treePath("HEAD", route.Path), route)
+			_, err = router.Tree.Add(treePath("HEAD", route.Path), route)
 		}
 
 		// Error adding a route to the pathtree.
@@ -357,40 +379,21 @@ func (router *Router) Reverse(action string, argValues map[string]string) *Actio
 			argValues[route.MethodName[methodWildcard+1:]] = methodName[methodWildcard:]
 		}
 
-		// Build up the URL.
-		var (
-			queryValues  = make(url.Values)
-			pathElements = strings.Split(route.Path, "/")
-		)
-		for i, el := range pathElements {
-			pos := strings.LastIndex(el, ":")
-			if pos == -1 {
-				continue
-			}
+		// Get the path for the route and generate the url
+		queryValues := make(url.Values)
+		path, unusedValues, missing := router.Tree.Reverse(route.leaf, argValues)
+		_, url := untreePath(path)
 
-			val, ok := argValues[el[pos+1:]]
-			if !ok {
-				val = "<nil>"
-				ERROR.Print("revel/router: reverse route missing route arg ", el[1:])
-			}
-			// Include any prefixes
-			if pos == 0 {
-				pathElements[i] = val
-			} else {
-				pathElements[i] = el[:pos] + val
-			}
-			delete(argValues, el[pos+1:])
-
-			continue
+		if missing != nil {
+			ERROR.Print("revel/router: reverse route missing route args %+v", missing)
 		}
 
 		// Add any args that were not inserted into the path into the query string.
-		for k, v := range argValues {
+		for k, v := range unusedValues {
 			queryValues.Set(k, v)
 		}
 
 		// Calculate the final URL and Method
-		url := strings.Join(pathElements, "/")
 		if len(queryValues) > 0 {
 			url += "?" + queryValues.Encode()
 		}

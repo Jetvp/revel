@@ -277,6 +277,7 @@ var reverseRoutingTestCases = map[*ReverseRouteArgs]*ActionDefinition{
 func TestReverseRouting(t *testing.T) {
 	router := NewRouter("")
 	router.Routes, _ = parseRoutes("", TEST_ROUTES, false)
+	router.updateTree()
 	for routeArgs, expected := range reverseRoutingTestCases {
 		actual := router.Reverse(routeArgs.action, routeArgs.args)
 		if !eq(t, "Found route", actual != nil, expected != nil) {

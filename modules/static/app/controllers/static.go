@@ -89,3 +89,14 @@ func (c Static) ServeModule(moduleName, prefix, filepath string) revel.Result {
 
 	return c.Serve(absPath, filepath)
 }
+
+// Serving a file with its extention seperate
+//   Route (conf/routes):
+//     GET /favicon.ico Static.ServeFile("public/img","favicon","png")
+//   Request:
+//     favicon.ico
+//   Calls:
+//     Static.Serve("public/img", "favicon", "png")
+func (c Static) ServeFile(prefix, filepath string, extention string) revel.Result {
+	return c.Serve(prefix, filepath+"."+extention)
+}
