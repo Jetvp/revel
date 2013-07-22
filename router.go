@@ -70,12 +70,12 @@ func NewRoute(method, path, action, fixedArgs, routesPath string, line int) (r *
 	actionSplit := strings.Split(action, ".")
 	if len(actionSplit) == 2 {
 		if (len(actionSplit[0]) > 1) && (actionSplit[0][len(actionSplit[0])-1] == ':') {
-			r.ControllerName = actionSplit[0][:len(actionSplit[0])-2]
+			r.ControllerName = actionSplit[0][:len(actionSplit[0])-1]
 		} else {
 			r.ControllerName = actionSplit[0]
 		}
 		if (len(actionSplit[1]) > 1) && (actionSplit[1][len(actionSplit[1])-1] == ':') {
-			r.MethodName = actionSplit[1][:len(actionSplit[1])-2]
+			r.MethodName = actionSplit[1][:len(actionSplit[1])-1]
 		} else {
 			r.MethodName = actionSplit[1]
 		}
