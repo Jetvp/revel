@@ -123,7 +123,7 @@ func (router *Router) Route(req *http.Request) *RouteMatch {
 	if len(expansions) > 0 {
 		params = make(url.Values)
 		for i, v := range expansions {
-			params[leaf.Wildcards[i]] = []string{v}
+			params[leaf.Wildcards[i].Name] = []string{v}
 		}
 	}
 
